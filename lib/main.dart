@@ -5,6 +5,7 @@ import 'theme/app_theme.dart';
 import 'screens/splash/splash_screen.dart';
 import 'screens/root/root_shell.dart';
 import 'screens/onboarding/onboarding_flow.dart';
+import 'screens/auth/pin_entry_screen.dart';
 import 'providers/app_settings_provider.dart';
 import 'providers/chat_provider.dart';
 import 'providers/mood_provider.dart';
@@ -52,12 +53,14 @@ class PsychoAiAssistantApp extends StatelessWidget {
             );
           }
 
-          // Иначе показываем главное приложение
+          // Главное приложение с PIN защитой
           return MaterialApp(
             title: 'ИИ-ассистент психолога',
             theme: AppTheme.lightTheme,
             debugShowCheckedModeBanner: false,
-            home: const RootShell(),
+            home: settings.isPinEnabled
+                ? PinProtectedHome()
+                : const RootShell(),
             routes: {
               '/home': (context) => const RootShell(),
               '/onboarding': (context) => const OnboardingFlow(),
@@ -65,6 +68,33 @@ class PsychoAiAssistantApp extends StatelessWidget {
           );
         },
       ),
+    );
+  }
+}
+
+/// Экран с PIN защитой
+class PinProtectedHome extends StatefulWidget {
+  const PinProtectedHome({super.key});
+
+  @override
+  State<PinProtectedHome> createState() => _PinProtectedHomeState();
+}
+
+class _PinProtectedHomeState extends State<PinProtectedHome> {
+  bool _isAuthenticated = false;
+
+  @override
+  Widget build(BuildContext context) {
+    if (_isAuthenticated) {
+      return const RootShell();
+    }
+
+    return PinEntryScreen(
+      onSuccess: () {
+        setState(() {
+          _isAuthenticated = true;
+        });
+      },
     );
   }
 }

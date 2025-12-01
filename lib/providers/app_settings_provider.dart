@@ -1,15 +1,18 @@
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../services/pin_security_service.dart';
 
 class AppSettingsProvider extends ChangeNotifier {
+  final PinSecurityService _pinService = PinSecurityService();
+
   bool _isOnboardingCompleted = false;
   String _userName = '';
   String _userGoal = '';
   String _reminderFrequency = 'once_daily';
   bool _isPinEnabled = false;
-  String _pin = '';
   bool _isDarkMode = false;
   bool _isInitialized = false;
+  bool _isBiometricEnabled = false;
 
   bool get isOnboardingCompleted => _isOnboardingCompleted;
   String get userName => _userName;
@@ -18,6 +21,7 @@ class AppSettingsProvider extends ChangeNotifier {
   bool get isPinEnabled => _isPinEnabled;
   bool get isDarkMode => _isDarkMode;
   bool get isInitialized => _isInitialized;
+  bool get isBiometricEnabled => _isBiometricEnabled;
 
   AppSettingsProvider() {
     _loadSettingsSync();
@@ -34,9 +38,12 @@ class AppSettingsProvider extends ChangeNotifier {
       _userName = prefs.getString('user_name') ?? '';
       _userGoal = prefs.getString('user_goal') ?? '';
       _reminderFrequency = prefs.getString('reminder_frequency') ?? 'once_daily';
-      _isPinEnabled = prefs.getBool('pin_enabled') ?? false;
-      _pin = prefs.getString('pin') ?? '';
       _isDarkMode = prefs.getBool('dark_mode') ?? false;
+
+      // Проверяем PIN через сервис безопасности
+      _isPinEnabled = await _pinService.isPinEnabled();
+      _isBiometricEnabled = await _pinService.isBiometricEnabled();
+
       _isInitialized = true;
       notifyListeners();
     } catch (e) {
@@ -73,25 +80,41 @@ class AppSettingsProvider extends ChangeNotifier {
   }
 
   Future<void> enablePin(String pin) async {
-    _isPinEnabled = true;
-    _pin = pin;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('pin_enabled', true);
-    await prefs.setString('pin', pin);
-    notifyListeners();
+    try {
+      await _pinService.setPin(pin);
+      _isPinEnabled = true;
+      notifyListeners();
+    } catch (e) {
+      print('Error enabling PIN: $e');
+      rethrow;
+    }
   }
 
   Future<void> disablePin() async {
-    _isPinEnabled = false;
-    _pin = '';
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('pin_enabled', false);
-    await prefs.remove('pin');
-    notifyListeners();
+    try {
+      await _pinService.removePin();
+      _isPinEnabled = false;
+      _isBiometricEnabled = false;
+      notifyListeners();
+    } catch (e) {
+      print('Error disabling PIN: $e');
+      rethrow;
+    }
   }
 
-  bool verifyPin(String enteredPin) {
-    return _pin == enteredPin;
+  Future<void> setBiometricEnabled(bool enabled) async {
+    try {
+      await _pinService.setBiometricEnabled(enabled);
+      _isBiometricEnabled = enabled;
+      notifyListeners();
+    } catch (e) {
+      print('Error setting biometric: $e');
+      rethrow;
+    }
+  }
+
+  Future<bool> isBiometricAvailable() async {
+    return await _pinService.isBiometricAvailable();
   }
 
   Future<void> toggleDarkMode(bool value) async {

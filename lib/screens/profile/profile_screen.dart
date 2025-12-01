@@ -16,6 +16,7 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   late TextEditingController _nameController;
   late TextEditingController _goalController;
+  bool _biometricAvailable = false;
 
   @override
   void initState() {
@@ -23,6 +24,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final settings = context.read<AppSettingsProvider>();
     _nameController = TextEditingController(text: settings.userName);
     _goalController = TextEditingController(text: settings.userGoal);
+    _checkBiometric();
+  }
+
+  Future<void> _checkBiometric() async {
+    final available = await context.read<AppSettingsProvider>().isBiometricAvailable();
+    if (mounted) {
+      setState(() {
+        _biometricAvailable = available;
+      });
+    }
   }
 
   @override
@@ -70,9 +81,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 const SizedBox(height: 32),
 
                 // Раздел безопасности
-                _buildSectionTitle('🔒 Безопасность'),
+                _buildSectionTitle('🔒 Безопасность и конфиденциальность'),
                 const SizedBox(height: 12),
-                _buildSecuritySection(),
+                _buildSecuritySection(settingsProvider),
                 const SizedBox(height: 32),
 
                 // Раздел информации
@@ -223,92 +234,170 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _buildSecuritySection() {
-    return Consumer<AppSettingsProvider>(
-      builder: (context, settingsProvider, _) {
-        return Card(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
+  Widget _buildSecuritySection(AppSettingsProvider settingsProvider) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            // PIN защита
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Защита PIN-кодом',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                          ),
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Защита PIN-кодом',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
                         ),
-                        SizedBox(height: 4),
-                        Text(
-                          'Заблокировать приложение при запуске',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: AppColors.textLight,
-                          ),
+                      ),
+                      SizedBox(height: 4),
+                      Text(
+                        'Заблокировать приложение при запуске',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: AppColors.textLight,
                         ),
-                      ],
-                    ),
-                    Switch(
-                      value: settingsProvider.isPinEnabled,
-                      onChanged: (value) {
-                        if (value) {
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (context) => const PinSetupScreen(),
-                            ),
-                          );
-                        } else {
-                          context.read<AppSettingsProvider>().disablePin();
-                        }
-                      },
-                      activeColor: AppColors.primary,
-                    ),
-                  ],
+                      ),
+                    ],
+                  ),
                 ),
-                const Divider(height: 24),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Ночной режим',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                          ),
+                Switch(
+                  value: settingsProvider.isPinEnabled,
+                  onChanged: (value) {
+                    if (value) {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (context) => const PinSetupScreen(),
                         ),
-                        SizedBox(height: 4),
-                        Text(
-                          'Тёмная тема для глаз',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: AppColors.textLight,
-                          ),
-                        ),
-                      ],
-                    ),
-                    Switch(
-                      value: settingsProvider.isDarkMode,
-                      onChanged: (value) {
-                        context.read<AppSettingsProvider>().toggleDarkMode(value);
-                      },
-                      activeColor: AppColors.primary,
-                    ),
-                  ],
+                      );
+                    } else {
+                      context.read<AppSettingsProvider>().disablePin();
+                    }
+                  },
+                  activeColor: AppColors.primary,
                 ),
               ],
             ),
-          ),
-        );
-      },
+            // Биометрия (только если PIN включен и биометрия доступна)
+            if (settingsProvider.isPinEnabled && _biometricAvailable) ..[
+              const Divider(height: 24),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Face ID / Touch ID',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        SizedBox(height: 4),
+                        Text(
+                          'Использовать биометрию вместо PIN',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: AppColors.textLight,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Switch(
+                    value: settingsProvider.isBiometricEnabled,
+                    onChanged: (value) async {
+                      try {
+                        await context.read<AppSettingsProvider>().setBiometricEnabled(value);
+                      } catch (e) {
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('❌ Ошибка: ${e.toString()}'),
+                              backgroundColor: Colors.red.shade600,
+                            ),
+                          );
+                        }
+                      }
+                    },
+                    activeColor: AppColors.primary,
+                  ),
+                ],
+              ),
+            ],
+            const Divider(height: 24),
+            // Темный режим
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Ночной режим',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    SizedBox(height: 4),
+                    Text(
+                      'Тёмная тема для глаз',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: AppColors.textLight,
+                      ),
+                    ),
+                  ],
+                ),
+                Switch(
+                  value: settingsProvider.isDarkMode,
+                  onChanged: (value) {
+                    context.read<AppSettingsProvider>().toggleDarkMode(value);
+                  },
+                  activeColor: AppColors.primary,
+                ),
+              ],
+            ),
+            const Divider(height: 24),
+            // Конфиденциальность
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFF21808D).withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.shield_outlined,
+                    color: const Color(0xFF21808D),
+                    size: 20,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'Все данные защищены и хранятся локально на устройстве. '
+                          'Никакие данные не используются для рекламы.',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: AppColors.textDark,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
